@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Google</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=search"
+    />
+  </head>
+  <body>
+    <!-- HOME VIEW -->
+    <div id="home" class="home-container">
+      <main class="home-main">
+        <div class="logo-text">
+          <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span
+          ><span>e</span>
+        </div>
+        <form class="search-form" action="" method="GET">
+          <div class="search-box">
+            <span class="material-symbols-outlined search-icon"> search </span>
+            <input
+              type="text"
+              name="q"
+              class="search-input"
+              placeholder="Search the web..."
+              autocomplete="off"
+            />
+          </div>
+          <div class="search-buttons">
+            <button type="submit" class="btn">Mini Search</button>
+            <button
+              type="button"
+              class="btn"
+              onclick="document.querySelector('.search-input').value=''; document.querySelector('.search-input').focus();"
+            >
+              I'm Feeling Lucky
+            </button>
+          </div>
+        </form>
+      </main>
+      <footer class="footer">
+        <div class="footer-top">India</div>
+        <div class="footer-links">
+          <div class="footer-section">
+            <span class="footer-link">About</span>
+            <span class="footer-link">Advertising</span>
+            <span class="footer-link">Business</span>
+            <span class="footer-link">How Search works</span>
+          </div>
+          <div class="footer-section">
+            <span class="footer-link">Privacy</span>
+            <span class="footer-link">Terms</span>
+            <span class="footer-link">Settings</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- RESULTS VIEW -->
+    <div id="resultsPage" class="results-page">
+      <header class="results-header">
+        <div class="results-logo" id="resultsLogo">
+          <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span
+          ><span>e</span>
+        </div>
+        <form class="results-search-form" action="" method="GET">
+          <div class="search-box">
+            <span class="material-symbols-outlined search-icon"> search </span>
+            <input
+              type="text"
+              name="q"
+              id="resultsQueryInput"
+              class="search-input"
+              autocomplete="off"
+              placeholder="Search the Web"
+            />
+          </div>
+        </form>
+      </header>
+
+      <main class="results-main">
+        <div id="resultsInfo" class="results-info"></div>
+        <div id="resultsList"></div>
+        <div id="resultsLoading" class="results-loading" style="display: none">
+          <div class="spinner"></div>
+          <span>Loading results...</span>
+        </div>
+        <div
+          id="resultsError"
+          class="results-error"
+          style="display: none"
+        ></div>
+      </main>
+
+      <footer class="footer">
+        <div class="footer-top">India</div>
+        <div class="footer-links">
+          <div class="footer-section">
+            <span class="footer-link">About</span>
+            <span class="footer-link">Advertising</span>
+            <span class="footer-link">Business</span>
+            <span class="footer-link">How Search works</span>
+          </div>
+          <div class="footer-section">
+            <span class="footer-link">Privacy</span>
+            <span class="footer-link">Terms</span>
+            <span class="footer-link">Settings</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
