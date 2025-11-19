@@ -47,7 +47,16 @@ def build_index():
     print("Fetching pages from MongoDB...")
 
     # Request snippet + text + title + url (and optional content_type if you stored it)
-    projection = {"url": 1, "title": 1, "text": 1, "snippet": 1}
+    projection = {
+    "url": 1,
+    "title": 1,
+    "text": 1,
+    "snippet": 1,
+    "favicon": 1,
+    "site_name": 1,
+    "image": 1
+    }
+
     try:
         cursor = PAGES_COLL.find({}, projection)
     except PyMongoError as e:
@@ -107,8 +116,12 @@ def build_index():
             doc_metadata[doc_id] = {
                 "url": url,
                 "title": title,
-                "snippet": snippet
+                "snippet": snippet,
+                "favicon": page.get("favicon", ""),
+                "site_name": page.get("site_name", ""),
+                "image": page.get("image", "")
             }
+
 
             tf_counter = Counter(tokens)
             for term, tf in tf_counter.items():
@@ -157,6 +170,9 @@ def build_index():
             "title": meta["title"],
             "length": doc_lengths[doc_id],
             "snippet": meta["snippet"],
+            "favicon": meta.get("favicon", ""),
+            "site_name": meta.get("site_name", ""),
+            "image": meta.get("image", "")
         })
 
     if docs_bulk:
