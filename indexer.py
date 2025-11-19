@@ -5,11 +5,11 @@ from collections import defaultdict, Counter
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
-
+from pymongo.errors import PyMongoError
 
 # ------------------ Config & setup ------------------ #
 
-load_dotenv()  # loads .env from current directory
+load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "basic_search_engine")
@@ -24,10 +24,8 @@ PAGES_COLL = db["pages"]
 DOCS_COLL = db["documents"]
 INDEX_COLL = db["index_terms"]
 
-
 # ------------------ Tokenization ------------------ #
 
-# Simple English stopword list (can tweak later)
 STOPWORDS = {
     "the", "is", "in", "at", "of", "a", "an", "and", "or", "to", "for",
     "on", "with", "by", "this", "that", "it", "as", "are", "was", "were",
@@ -38,22 +36,33 @@ STOPWORDS = {
 TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
 
 def tokenize(text: str):
-    """
-    Convert text -> list of normalized tokens.
-    Lowercase, keep only alphanumeric sequences, remove stopwords & very short tokens.
-    """
-    text = text.lower()
+    text = (text or "").lower()
     tokens = TOKEN_RE.findall(text)
     tokens = [t for t in tokens if len(t) > 2 and t not in STOPWORDS]
     return tokens
-
 
 # ------------------ Index building ------------------ #
 
 def build_index():
     print("Fetching pages from MongoDB...")
-    pages_cursor = PAGES_COLL.find({}, {"url": 1, "title": 1, "text": 1})
-    pages = list(pages_cursor)
+
+    # Request snippet + text + title + url (and optional content_type if you stored it)
+    projection = {"url": 1, "title": 1, "text": 1, "snippet": 1}
+    try:
+        cursor = PAGES_COLL.find({}, projection)
+    except PyMongoError as e:
+        print("Failed to query pages collection:", e)
+        return
+
+    # iterate defensively so a single bad document won't abort the whole run
+    pages = []
+    for doc in cursor:
+        try:
+            pages.append(doc)
+        except Exception as e:
+            # If decoding a particular document fails, skip it and continue
+            print("Skipping a problematic document while reading cursor:", e)
+            continue
 
     if not pages:
         print("No pages found in 'pages' collection. Run the crawler first.")
@@ -61,35 +70,56 @@ def build_index():
 
     print(f"Found {len(pages)} pages. Building index...")
 
-    # In-memory data structures
-    # inverted_index: term -> dict(doc_id -> tf)
     inverted_index = defaultdict(lambda: defaultdict(int))
-    # doc_lengths: doc_id -> doc length (number of tokens)
     doc_lengths = {}
-    # doc_metadata: doc_id -> dict(url, title, snippet)
     doc_metadata = {}
 
     for page in pages:
-        doc_id = page["_id"]
-        url = page.get("url", "")
-        title = page.get("title", "") or url
-        text = page.get("text", "") or ""
+        try:
+            doc_id = page["_id"]
+            url = page.get("url", "")
+            # Prefer stored title; fallback to url if empty
+            title = page.get("title") or url
 
-        tokens = tokenize(text)
-        if not tokens:
+            # Prefer full text for indexing. If missing, try snippet.
+            # Ensure we have a string to tokenize.
+            text = page.get("text")
+            if text is None:
+                text = page.get("snippet", "")
+            if text is None:
+                text = ""
+
+            # Defensive: skip tiny or empty documents (avoids noise)
+            if not isinstance(text, str) or len(text.strip()) < 50:
+                # store docs metadata but don't index tokens for tiny docs
+                continue
+
+            tokens = tokenize(text)
+            if not tokens:
+                continue
+
+            doc_lengths[doc_id] = len(tokens)
+            # store snippet preferentially: page.snippet else first 300 chars of text
+            snippet = page.get("snippet")
+            if not snippet:
+                snippet = text[:300]
+
+            doc_metadata[doc_id] = {
+                "url": url,
+                "title": title,
+                "snippet": snippet
+            }
+
+            tf_counter = Counter(tokens)
+            for term, tf in tf_counter.items():
+                inverted_index[term][doc_id] += tf
+
+        except KeyError as e:
+            print("Skipping doc due to missing key:", e)
             continue
-
-        doc_lengths[doc_id] = len(tokens)
-        doc_metadata[doc_id] = {
-            "url": url,
-            "title": title,
-            "snippet": text[:300]  # first 300 chars as snippet
-        }
-
-        # term frequencies for this doc
-        tf_counter = Counter(tokens)
-        for term, tf in tf_counter.items():
-            inverted_index[term][doc_id] += tf
+        except Exception as e:
+            print("Unexpected error while processing a page, skipping:", e)
+            continue
 
     num_docs = len(doc_lengths)
     print(f"Indexed {num_docs} documents with tokens.")
@@ -98,12 +128,10 @@ def build_index():
         print("No documents contained tokens. Aborting index build.")
         return
 
-    # Compute IDF and prepare Mongo documents
     index_docs = []
     for term, postings in inverted_index.items():
-        df = len(postings)  # document frequency
-        idf = math.log(num_docs / (1 + df))  # simple IDF (natural log)
-
+        df = len(postings)
+        idf = math.log(num_docs / (1 + df))
         term_entry = {
             "term": term,
             "idf": float(idf),
@@ -116,8 +144,6 @@ def build_index():
 
     print(f"Built index for {len(index_docs)} unique terms.")
 
-    # ------------------ Store in MongoDB ------------------ #
-
     print("Dropping old 'documents' and 'index_terms' collections (if they exist)...")
     DOCS_COLL.drop()
     INDEX_COLL.drop()
@@ -126,7 +152,7 @@ def build_index():
     docs_bulk = []
     for doc_id, meta in doc_metadata.items():
         docs_bulk.append({
-            "_id": doc_id,  # reuse same ObjectId as in pages
+            "_id": doc_id,
             "url": meta["url"],
             "title": meta["title"],
             "length": doc_lengths[doc_id],
@@ -138,7 +164,6 @@ def build_index():
     print(f"Inserted {len(docs_bulk)} documents into 'documents' collection.")
 
     print("Inserting index terms (this may take a moment)...")
-    # Insert in batches to avoid huge single insert
     batch_size = 1000
     for i in range(0, len(index_docs), batch_size):
         batch = index_docs[i:i + batch_size]
